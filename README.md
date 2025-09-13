@@ -304,7 +304,7 @@ services:
 
 
 ## DEPLOYED ON AWS EC2 SERVER
-![alt text](NOMI-AWS-SERVER.png)
+![alt text](NOMI-SERVER-AWS.png)
 
 ## NOMI DASHBOARD
 ![alt text](NOMI-DASHBOARD.png)
