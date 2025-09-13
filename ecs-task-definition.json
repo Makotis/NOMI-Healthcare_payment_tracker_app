@@ -1,0 +1,80 @@
+{
+  "family": "healthcare-payment-tracker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "healthcare-app",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/healthcare-payment-tracker:latest",
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp",
+          "hostPort": 80
+        }
+      ],
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/healthcare-payment-tracker",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        }
+      ],
+      "secrets": [],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "stopTimeout": 30,
+      "startTimeout": 120,
+      "dependsOn": [],
+      "disableNetworking": false,
+      "interactive": false,
+      "pseudoTerminal": false,
+      "readonlyRootFilesystem": false,
+      "privileged": false,
+      "workingDirectory": "/usr/share/nginx/html"
+    }
+  ],
+  "volumes": [],
+  "placementConstraints": [],
+  "tags": [
+    {
+      "key": "Environment",
+      "value": "production"
+    },
+    {
+      "key": "Application",
+      "value": "healthcare-payment-tracker"
+    },
+    {
+      "key": "ManagedBy",
+      "value": "ECS"
+    }
+  ]
+}

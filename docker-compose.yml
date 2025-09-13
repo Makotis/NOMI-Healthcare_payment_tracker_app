@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  healthcare-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: healthcare-payment-tracker
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - healthcare-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.healthcare-app.rule=Host(`localhost`)"
+      - "traefik.http.services.healthcare-app.loadbalancer.server.port=80"
+
+networks:
+  healthcare-network:
+    driver: bridge
+
+volumes:
+  healthcare-data:
+    driver: local

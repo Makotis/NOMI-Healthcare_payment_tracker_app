@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healthcare Payment Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1>Healthcare Payment Tracker</h1>
+            <div class="user-info">
+                <span>Welcome, John Doe</span>
+                <button class="btn btn-secondary">Settings</button>
+            </div>
+        </header>
+
+        <nav class="sidebar">
+            <ul class="nav-menu">
+                <li><a href="#dashboard" class="nav-link active" data-tab="dashboard">Dashboard</a></li>
+                <li><a href="#payments" class="nav-link" data-tab="payments">Payment History</a></li>
+                <li><a href="#add-payment" class="nav-link" data-tab="add-payment">Add Payment</a></li>
+                <li><a href="#providers" class="nav-link" data-tab="providers">Providers</a></li>
+                <li><a href="#reports" class="nav-link" data-tab="reports">Reports</a></li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="dashboard-grid">
+                    <div class="stat-card">
+                        <h3>Total Payments</h3>
+                        <div class="stat-value" id="total-payments">$0</div>
+                        <div class="stat-change positive">+12% this month</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Pending Claims</h3>
+                        <div class="stat-value" id="pending-claims">0</div>
+                        <div class="stat-change negative">3 overdue</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Insurance Coverage</h3>
+                        <div class="stat-value" id="coverage-percent">85%</div>
+                        <div class="stat-change">Average coverage</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Outstanding Balance</h3>
+                        <div class="stat-value" id="outstanding-balance">$0</div>
+                        <div class="stat-change">Due within 30 days</div>
+                    </div>
+                </div>
+
+                <div class="recent-payments">
+                    <h2>Recent Payments</h2>
+                    <div class="payment-list" id="recent-payments-list"></div>
+                </div>
+            </div>
+
+            <!-- Payment History Tab -->
+            <div id="payments" class="tab-content">
+                <div class="payments-header">
+                    <h2>Payment History</h2>
+                    <div class="filters">
+                        <select id="status-filter">
+                            <option value="all">All Status</option>
+                            <option value="paid">Paid</option>
+                            <option value="pending">Pending</option>
+                            <option value="overdue">Overdue</option>
+                        </select>
+                        <select id="provider-filter">
+                            <option value="all">All Providers</option>
+                        </select>
+                        <input type="date" id="date-filter" placeholder="Filter by date">
+                    </div>
+                </div>
+                <div class="payment-table-container">
+                    <table class="payment-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Provider</th>
+                                <th>Service</th>
+                                <th>Amount</th>
+                                <th>Insurance</th>
+                                <th>Your Cost</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payments-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Add Payment Tab -->
+            <div id="add-payment" class="tab-content">
+                <div class="form-container">
+                    <h2>Add New Payment</h2>
+                    <form id="payment-form">
+                        <div class="form-group">
+                            <label for="service-date">Service Date</label>
+                            <input type="date" id="service-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="provider-select">Provider</label>
+                            <select id="provider-select" required>
+                                <option value="">Select Provider</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="service-type">Service Type</label>
+                            <input type="text" id="service-type" placeholder="e.g., Annual Checkup" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="total-amount">Total Amount</label>
+                            <input type="number" id="total-amount" step="0.01" placeholder="0.00" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="insurance-coverage">Insurance Coverage</label>
+                            <input type="number" id="insurance-coverage" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="payment-status">Payment Status</label>
+                            <select id="payment-status" required>
+                                <option value="pending">Pending</option>
+                                <option value="paid">Paid</option>
+                                <option value="overdue">Overdue</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="notes">Notes</label>
+                            <textarea id="notes" rows="3" placeholder="Additional notes..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Payment</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Providers Tab -->
+            <div id="providers" class="tab-content">
+                <div class="providers-header">
+                    <h2>Healthcare Providers</h2>
+                    <button class="btn btn-primary" id="add-provider-btn">Add Provider</button>
+                </div>
+                <div class="providers-grid" id="providers-grid"></div>
+            </div>
+
+            <!-- Reports Tab -->
+            <div id="reports" class="tab-content">
+                <div class="reports-header">
+                    <h2>Payment Reports</h2>
+                    <button class="btn btn-secondary" id="export-btn">Export Data</button>
+                </div>
+                <div class="reports-grid">
+                    <div class="chart-container">
+                        <h3>Monthly Spending</h3>
+                        <div class="chart-placeholder">Chart visualization would go here</div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Provider Breakdown</h3>
+                        <div class="chart-placeholder">Provider spending chart</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
