@@ -1,15 +1,20 @@
 # Healthcare Payment Tracker - AWS Deployment Guide
 
-This guide provides comprehensive instructions for deploying the Healthcare Payment Tracker application on Amazon Web Services (AWS) using multiple deployment strategies.
+This guide provides comprehensive instructions for deploying the Healthcare Payment Tracker application on Amazon Web Services (AWS) with HTTPS support using Traefik reverse proxy and Let's Encrypt certificates.
+
+## 🌐 Production Example
+**Live Application:** [https://nomi.payment.ats-victorycenter.org](https://nomi.payment.ats-victorycenter.org)
+**Traefik Dashboard:** [https://traefik.nomi.payment.ats-victorycenter.org](https://traefik.nomi.payment.ats-victorycenter.org)
 
 ## 📋 Table of Contents
 
 - [Prerequisites](#prerequisites)
 - [Deployment Options Overview](#deployment-options-overview)
-- [Option 1: ECS Fargate (Recommended)](#option-1-ecs-fargate-recommended)
-- [Option 2: EC2 with Docker](#option-2-ec2-with-docker)
+- [Option 1: EC2 with Traefik HTTPS (Recommended)](#option-1-ec2-with-traefik-https-recommended)
+- [Option 2: ECS Fargate with ALB](#option-2-ecs-fargate-with-alb)
 - [Option 3: S3 Static Hosting with CloudFront](#option-3-s3-static-hosting-with-cloudfront)
 - [Option 4: AWS App Runner](#option-4-aws-app-runner)
+- [SSL Certificate Management](#ssl-certificate-management)
 - [Cost Optimization](#cost-optimization)
 - [Monitoring and Logging](#monitoring-and-logging)
 - [Security Considerations](#security-considerations)
@@ -21,7 +26,8 @@ This guide provides comprehensive instructions for deploying the Healthcare Paym
 - **AWS CLI** installed and configured
 - **Docker** installed locally
 - **AWS Account** with appropriate permissions
-- **Domain name** (optional, for custom domains)
+- **Domain name** (required for HTTPS with Let's Encrypt)
+- **DNS management access** (Route 53 or external provider)
 
 ### AWS CLI Setup
 ```bash
@@ -47,14 +53,291 @@ Your AWS user needs the following services:
 
 ## 🚀 Deployment Options Overview
 
-| Option | Complexity | Cost | Scalability | Use Case |
-|--------|------------|------|-------------|----------|
-| **ECS Fargate** | Medium | $15-30/month | High | Production environments |
-| **EC2 + Docker** | Medium | $10-20/month | Medium | Development/Testing |
-| **S3 + CloudFront** | Low | $2-5/month | High | Static hosting only |
-| **App Runner** | Low | $20-40/month | High | Simplest container deployment |
+| Option | Complexity | Cost | Scalability | HTTPS | Use Case |
+|--------|------------|------|-------------|-------|----------|
+| **EC2 + Traefik** | Low | $8-15/month | Medium | Auto SSL | Production with domains |
+| **ECS Fargate** | Medium | $15-30/month | High | ALB SSL | Enterprise environments |
+| **S3 + CloudFront** | Low | $2-5/month | High | CloudFront SSL | Static hosting only |
+| **App Runner** | Low | $20-40/month | High | Built-in SSL | Simplest deployment |
 
-## 🏗️ Option 1: ECS Fargate (Recommended)
+## 🏗️ Option 1: EC2 with Traefik HTTPS (Recommended)
+
+This option provides automatic HTTPS certificates with Traefik reverse proxy on a single EC2 instance.
+
+### Step 1: Launch EC2 Instance with Traefik Setup
+
+```bash
+# Launch EC2 instance
+aws ec2 run-instances \
+    --image-id ami-0c02fb55956c7d316 \
+    --count 1 \
+    --instance-type t3.small \
+    --key-name your-key-pair \
+    --security-group-ids sg-12345 \
+    --user-data file://traefik-user-data.sh \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=healthcare-traefik-server}]'
+```
+
+### Step 2: Create Enhanced User Data Script
+
+Create `traefik-user-data.sh`:
+```bash
+#!/bin/bash
+
+# Healthcare Payment Tracker with Traefik HTTPS - EC2 Setup
+set -e
+
+# Configuration
+DOMAIN="your-domain.com"  # Replace with your domain
+EMAIL="your-email@domain.com"  # Replace with your email
+
+# Update system
+yum update -y
+
+# Install Docker
+yum install -y docker git
+service docker start
+usermod -a -G docker ec2-user
+systemctl enable docker
+
+# Install Docker Compose
+curl -L "https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+# Create application directory
+mkdir -p /opt/healthcare-app
+cd /opt/healthcare-app
+
+# Clone the repository (replace with your repo URL)
+git clone https://github.com/your-username/healthcare-payment-tracker.git .
+
+# Update domain in docker-compose.yml
+sed -i "s/nomi.payment.ats-victorycenter.org/$DOMAIN/g" docker-compose.yml
+
+# Update email in traefik.yml
+sed -i "s/admin@ats-victorycenter.org/$EMAIL/g" traefik.yml
+
+# Create Traefik network
+docker network create traefik
+
+# Set up SSL certificate file
+touch acme.json
+chmod 600 acme.json
+
+# Start the application
+docker-compose up -d --build
+
+# Setup monitoring and logging
+cat > /etc/logrotate.d/docker-logs << EOF
+/var/lib/docker/containers/*/*-json.log {
+  daily
+  rotate 7
+  compress
+  delaycompress
+  missingok
+  notifempty
+  create 644 root root
+}
+EOF
+
+# Create startup script
+cat > /etc/systemd/system/healthcare-app.service << EOF
+[Unit]
+Description=Healthcare Payment Tracker
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/healthcare-app
+ExecStart=/usr/local/bin/docker-compose up -d
+ExecStop=/usr/local/bin/docker-compose down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable healthcare-app.service
+
+echo "Healthcare Payment Tracker with HTTPS deployed successfully!"
+echo "Access your application at: https://$DOMAIN"
+echo "Traefik dashboard at: https://traefik.$DOMAIN"
+```
+
+### Step 3: Configure Security Group
+
+```bash
+# Create security group for HTTPS
+aws ec2 create-security-group \
+    --group-name healthcare-https-sg \
+    --description "Healthcare Payment Tracker with HTTPS"
+
+# Get security group ID
+SG_ID=$(aws ec2 describe-security-groups \
+    --group-names healthcare-https-sg \
+    --query 'SecurityGroups[0].GroupId' \
+    --output text)
+
+# Allow HTTP (for Let's Encrypt challenge)
+aws ec2 authorize-security-group-ingress \
+    --group-id $SG_ID \
+    --protocol tcp \
+    --port 80 \
+    --cidr 0.0.0.0/0
+
+# Allow HTTPS
+aws ec2 authorize-security-group-ingress \
+    --group-id $SG_ID \
+    --protocol tcp \
+    --port 443 \
+    --cidr 0.0.0.0/0
+
+# Allow SSH
+aws ec2 authorize-security-group-ingress \
+    --group-id $SG_ID \
+    --protocol tcp \
+    --port 22 \
+    --cidr your.ip.address/32
+
+# Allow Traefik Dashboard (optional, restrict to your IP)
+aws ec2 authorize-security-group-ingress \
+    --group-id $SG_ID \
+    --protocol tcp \
+    --port 8080 \
+    --cidr your.ip.address/32
+```
+
+### Step 4: Route 53 DNS Configuration
+
+```bash
+# Create hosted zone (if not exists)
+aws route53 create-hosted-zone \
+    --name yourdomain.com \
+    --caller-reference $(date +%s)
+
+# Get hosted zone ID
+ZONE_ID=$(aws route53 list-hosted-zones \
+    --query "HostedZones[?Name=='yourdomain.com.'].Id" \
+    --output text | cut -d'/' -f3)
+
+# Get EC2 instance public IP
+INSTANCE_IP=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=healthcare-traefik-server" \
+    --query 'Reservations[0].Instances[0].PublicIpAddress' \
+    --output text)
+
+# Create A record for main domain
+cat > dns-record.json << EOF
+{
+    "Changes": [
+        {
+            "Action": "CREATE",
+            "ResourceRecordSet": {
+                "Name": "yourdomain.com",
+                "Type": "A",
+                "TTL": 300,
+                "ResourceRecords": [
+                    {
+                        "Value": "$INSTANCE_IP"
+                    }
+                ]
+            }
+        },
+        {
+            "Action": "CREATE",
+            "ResourceRecordSet": {
+                "Name": "traefik.yourdomain.com",
+                "Type": "A",
+                "TTL": 300,
+                "ResourceRecords": [
+                    {
+                        "Value": "$INSTANCE_IP"
+                    }
+                ]
+            }
+        }
+    ]
+}
+EOF
+
+aws route53 change-resource-record-sets \
+    --hosted-zone-id $ZONE_ID \
+    --change-batch file://dns-record.json
+```
+
+### Step 5: Deployment Verification
+
+```bash
+# SSH into your instance
+ssh -i your-key.pem ec2-user@$INSTANCE_IP
+
+# Check services
+docker-compose ps
+
+# Check logs
+docker-compose logs -f traefik
+docker-compose logs -f healthcare-app
+
+# Test HTTPS
+curl -I https://yourdomain.com
+```
+
+## 🔐 SSL Certificate Management
+
+### Let's Encrypt with Traefik
+
+Traefik automatically manages SSL certificates using Let's Encrypt:
+
+```bash
+# Check certificate status
+docker exec -it traefik traefik version
+
+# View certificate details in acme.json
+docker exec -it traefik cat /acme.json | jq '.letsencrypt.Certificates[0].domain'
+
+# Force certificate renewal (if needed)
+docker exec -it traefik rm /acme.json
+docker-compose restart traefik
+```
+
+### Manual Certificate Verification
+
+```bash
+# Check certificate expiry
+openssl s_client -connect yourdomain.com:443 -servername yourdomain.com 2>/dev/null | openssl x509 -noout -dates
+
+# Test SSL configuration
+curl -I https://yourdomain.com
+
+# SSL Labs test (external)
+# Visit: https://www.ssllabs.com/ssltest/analyze.html?d=yourdomain.com
+```
+
+### Certificate Monitoring Script
+
+```bash
+cat > /opt/healthcare-app/monitor_ssl.sh << 'EOF'
+#!/bin/bash
+DOMAIN="yourdomain.com"
+DAYS_UNTIL_EXPIRY=$(echo | openssl s_client -connect $DOMAIN:443 -servername $DOMAIN 2>/dev/null | openssl x509 -noout -checkend $((30*24*3600)) && echo "Certificate is valid for more than 30 days" || echo "Certificate expires within 30 days!")
+
+echo "$(date): $DAYS_UNTIL_EXPIRY" >> /var/log/ssl-monitor.log
+
+if [[ $DAYS_UNTIL_EXPIRY == *"expires within"* ]]; then
+    # Send alert (configure with your notification method)
+    echo "SSL Certificate expiring soon for $DOMAIN" | wall
+fi
+EOF
+
+chmod +x /opt/healthcare-app/monitor_ssl.sh
+
+# Add to crontab to run daily
+(crontab -l 2>/dev/null; echo "0 6 * * * /opt/healthcare-app/monitor_ssl.sh") | crontab -
+```
+
+## 🏗️ Option 2: ECS Fargate with ALB
 
 ### Step 1: Create ECR Repository
 

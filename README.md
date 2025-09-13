@@ -1,80 +1,121 @@
-# Healthcare Payment Tracker - Docker Deployment
+# Healthcare Payment Tracker - Secure HTTPS Deployment
 
-A containerized healthcare payment tracking application built with HTML, CSS, JavaScript, and deployed using Docker Compose with Nginx.
+A containerized healthcare payment tracking application built with HTML, CSS, JavaScript, and deployed using Docker Compose with Nginx and Traefik reverse proxy for automatic HTTPS certificates.
+
+## 🌐 Live Application
+**Production URL:** [https://nomi.payment.ats-victorycenter.org](https://nomi.payment.ats-victorycenter.org)
+**Traefik Dashboard:** [https://traefik.nomi.payment.ats-victorycenter.org](https://traefik.nomi.payment.ats-victorycenter.org) (admin/admin)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Docker installed on your system
 - Docker Compose installed on your system
+- Domain name pointing to your server (for HTTPS)
 
-### Deploy the Application
+### Option 1: HTTPS Deployment (Recommended)
 
-1. **Clone or navigate to the project directory:**
+1. **Navigate to the project directory:**
    ```bash
-   cd HEALTHCARE-PAYMENT-APP
+   cd NOMI-Healthcare_payment_tracker_app
    ```
 
-2. **Build and start the container:**
+2. **Run the automated HTTPS setup:**
    ```bash
-   docker-compose up -d --build
+   chmod +x setup-https.sh
+   ./setup-https.sh
    ```
 
 3. **Access the application:**
-   Open your web browser and navigate to:
+   - **Secure HTTPS:** https://nomi.payment.ats-victorycenter.org
+   - **Dashboard:** https://traefik.nomi.payment.ats-victorycenter.org
+
+### Option 2: Local HTTP Deployment
+
+1. **For local testing without domain:**
+   ```bash
+   # Create simple network
+   docker network create traefik
+   
+   # Start only the healthcare app
+   docker compose up healthcare-app -d --build
+   ```
+
+2. **Access locally:**
    ```
    http://localhost:8080
    ```
 
 ### Docker Commands
 
-- **Start the application:**
+- **Start with HTTPS:**
   ```bash
-  docker-compose up -d
+  docker compose up -d
   ```
 
 - **Stop the application:**
   ```bash
-  docker-compose down
+  docker compose down
   ```
 
 - **View logs:**
   ```bash
-  docker-compose logs -f healthcare-app
+  docker compose logs -f traefik
+  docker compose logs -f healthcare-app
   ```
 
 - **Rebuild and restart:**
   ```bash
-  docker-compose up -d --build --force-recreate
+  docker compose up -d --build --force-recreate
   ```
 
 - **Check container status:**
   ```bash
-  docker-compose ps
+  docker compose ps
+  ```
+
+- **Check SSL certificate:**
+  ```bash
+  ./check_cert.sh
   ```
 
 ## 🏗️ Architecture
 
 ### Container Stack
+- **Reverse Proxy:** Traefik v3.0 with automatic HTTPS
 - **Base Image:** `nginx:alpine` (lightweight and secure)
 - **Web Server:** Nginx with custom configuration
-- **Network:** Isolated Docker bridge network
-- **Port Mapping:** Host port 8080 → Container port 80
+- **Network:** Traefik bridge network with SSL termination
+- **SSL Certificates:** Let's Encrypt with auto-renewal
+- **Port Mapping:** 80 (HTTP) → 443 (HTTPS) → Container 80
 
 ### File Structure
 ```
-HEALTHCARE-PAYMENT-APP/
+NOMI-Healthcare_payment_tracker_app/
 ├── index.html          # Main application HTML
 ├── app.js              # JavaScript application logic
 ├── styles.css          # Application styles
 ├── Dockerfile          # Container build instructions
-├── docker-compose.yml  # Container orchestration
+├── docker-compose.yml  # Container orchestration with Traefik
 ├── nginx.conf          # Nginx web server configuration
+├── traefik.yml         # Traefik reverse proxy configuration
+├── setup-https.sh      # Automated HTTPS setup script
+├── check_cert.sh       # Certificate monitoring script
+├── acme.json           # Let's Encrypt certificate storage
 ├── .dockerignore       # Files to exclude from build
+├── AWS-DEPLOYMENT.md   # AWS deployment guide
 └── README.md          # This file
 ```
 
 ## ⚙️ Configuration
+
+### Traefik Features
+- **Automatic HTTPS:** Let's Encrypt SSL certificates
+- **HTTP to HTTPS Redirect:** Automatic secure redirects
+- **Load Balancing:** Multiple container support
+- **Health Monitoring:** Built-in health checks
+- **Dashboard:** Web UI for monitoring
+- **Auto-renewal:** SSL certificates renew automatically
 
 ### Nginx Features
 - **Gzip Compression:** Enabled for better performance
@@ -86,22 +127,27 @@ HEALTHCARE-PAYMENT-APP/
 ### Docker Compose Configuration
 ```yaml
 services:
+  traefik:
+    image: traefik:v3.0
+    ports:
+      - "80:80"     # HTTP
+      - "443:443"   # HTTPS
+      - "8080:8080" # Dashboard
+    
   healthcare-app:
     build: .
-    ports:
-      - "8080:80"
-    restart: unless-stopped
-    networks:
-      - healthcare-network
+    labels:
+      - "traefik.http.routers.healthcare-https.rule=Host(`nomi.payment.ats-victorycenter.org`)"
+      - "traefik.http.routers.healthcare-https.tls.certresolver=letsencrypt"
 ```
 
 ## 🔧 Customization
 
-### Change Port
-Edit `docker-compose.yml` and modify the port mapping:
+### Change Domain
+Edit `docker-compose.yml` and update the Host rule:
 ```yaml
-ports:
-  - "3000:80"  # Changes host port to 3000
+labels:
+  - "traefik.http.routers.healthcare-https.rule=Host(`your-domain.com`)"
 ```
 
 ### Environment Variables
@@ -113,33 +159,69 @@ environment:
 ```
 
 ### Volume Persistence
-To persist data, add volumes to `docker-compose.yml`:
+SSL certificates and data are automatically persisted:
 ```yaml
 volumes:
+  - traefik-certificates:/certificates
   - healthcare-data:/usr/share/nginx/html/data
+```
+
+### Custom Email for Let's Encrypt
+Edit `traefik.yml`:
+```yaml
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: your-email@domain.com
 ```
 
 ## 🔍 Monitoring
 
 ### Health Check
-The application includes a health endpoint:
+The application includes multiple health endpoints:
 ```bash
-curl http://localhost:8080/health
+# App health
+curl https://nomi.payment.ats-victorycenter.org/health
+
+# Traefik API
+curl https://traefik.nomi.payment.ats-victorycenter.org/api/http/routers
+```
+
+### SSL Certificate Status
+```bash
+# Check certificate expiry
+./check_cert.sh
+
+# View certificate details
+openssl s_client -connect nomi.payment.ats-victorycenter.org:443 -servername nomi.payment.ats-victorycenter.org
 ```
 
 ### Container Metrics
 View container resource usage:
 ```bash
-docker stats healthcare-payment-tracker
+docker stats traefik healthcare-payment-tracker
 ```
+
+### Traefik Dashboard
+Monitor your services at: https://traefik.nomi.payment.ats-victorycenter.org
+- Username: `admin`
+- Password: `admin`
 
 ## 🔒 Security
 
-The Nginx configuration includes:
-- Security headers (XSS protection, content type options)
-- Server tokens disabled
-- Content Security Policy
-- Frame options protection
+### Enhanced Security Features
+- **HTTPS Only:** All traffic encrypted with TLS 1.2+
+- **HSTS Headers:** Force HTTPS in browsers
+- **Security Headers:** XSS, CSRF, clickjacking protection
+- **Auto SSL Renewal:** Certificates renewed before expiry
+- **Server Tokens Disabled:** Hide server information
+- **Content Security Policy:** Prevent XSS attacks
+
+### SSL/TLS Configuration
+- **TLS Version:** Minimum TLS 1.2
+- **Cipher Suites:** Modern, secure ciphers only
+- **Certificate:** Let's Encrypt with 90-day auto-renewal
+- **OCSP Stapling:** Enabled for performance
 
 ## 🐛 Troubleshooting
 
@@ -213,6 +295,29 @@ services:
       timeout: 10s
       retries: 3
 ```
+
+
+## Your URLs:
+
+  - Healthcare App: https://nomi.payment.ats-victorycenter.org
+
+
+
+## DEPLOYED ON AWS EC2 SERVER
+![alt text](NOMI-AWS-SERVER.png)
+
+## NOMI DASHBOARD
+![alt text](NOMI-DASHBOARD.png)
+
+## NOMI PAYMENT HISTORY
+![alt text](NOMI-PAYMENT-HISTORY.png)
+
+## NOMI ADD PAYMENT
+![alt text](NOMI-ADD-PAYMENT.png)
+
+## NOMI PROVIDERS
+![alt text](NOMI-PROVIDERS.png)
+
 
 ## 📝 License
 
