@@ -1,25 +1,77 @@
 version: '3.8'
 
 services:
+  # Traefik Reverse Proxy with Let's Encrypt
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"     # HTTP
+      - "443:443"   # HTTPS
+      - "8080:8080" # Traefik Dashboard (optional)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/traefik.yml:ro
+      - ./acme.json:/acme.json
+      - traefik-certificates:/certificates
+    environment:
+      - TRAEFIK_API_DASHBOARD=true
+      - TRAEFIK_API_INSECURE=true
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      # Dashboard
+      - "traefik.http.routers.traefik.rule=Host(`traefik.nomi.payment.ats-victorycenter.org`)"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$$2y$$10$$8K8iBKr6qE4JzOJ8h7OG8OqTQ1J1JzqJN4zLJNkLJNkLJNkLJNkL"
+
+  # Healthcare Payment Tracker Application  
   healthcare-app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: healthcare-payment-tracker
-    ports:
-      - "8080:80"
     restart: unless-stopped
     networks:
-      - healthcare-network
+      - traefik
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.healthcare-app.rule=Host(`localhost`)"
+      # HTTP to HTTPS redirect
+      - "traefik.http.routers.healthcare-http.rule=Host(`nomi.payment.ats-victorycenter.org`)"
+      - "traefik.http.routers.healthcare-http.entrypoints=web"
+      - "traefik.http.routers.healthcare-http.middlewares=redirect-to-https"
+      # HTTPS router
+      - "traefik.http.routers.healthcare-https.rule=Host(`nomi.payment.ats-victorycenter.org`)"
+      - "traefik.http.routers.healthcare-https.entrypoints=websecure"
+      - "traefik.http.routers.healthcare-https.tls=true"
+      - "traefik.http.routers.healthcare-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.healthcare-https.service=healthcare-app"
+      # Service configuration
       - "traefik.http.services.healthcare-app.loadbalancer.server.port=80"
+      # Security headers middleware
+      - "traefik.http.routers.healthcare-https.middlewares=security-headers"
+      - "traefik.http.middlewares.security-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.security-headers.headers.customRequestHeaders.X-Forwarded-For="
+      - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.security-headers.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.security-headers.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
+      # HTTPS redirect middleware
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
 networks:
-  healthcare-network:
-    driver: bridge
+  traefik:
+    external: true
 
 volumes:
+  traefik-certificates:
   healthcare-data:
-    driver: local

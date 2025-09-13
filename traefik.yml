@@ -1,0 +1,96 @@
+# Traefik Configuration File for Healthcare Payment Tracker
+# Static configuration
+
+# Global configuration
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# Entry Points
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entrypoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        options: default
+
+# Providers
+providers:
+  # Docker provider
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik
+    watch: true
+  
+  # File provider for additional configuration
+  file:
+    filename: /traefik.yml
+    watch: true
+
+# API and Dashboard
+api:
+  dashboard: true
+  debug: true
+  insecure: true
+
+# Metrics
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+
+# Access Logs
+accessLog:
+  format: json
+  bufferingSize: 100
+
+# Certificate Resolvers (Let's Encrypt)
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@ats-victorycenter.org  # Replace with your email
+      storage: /acme.json
+      httpChallenge:
+        entryPoint: web
+      # Alternative: DNS Challenge (more reliable for subdomains)
+      # dnsChallenge:
+      #   provider: cloudflare  # or your DNS provider
+      #   resolvers:
+      #     - "1.1.1.1:53"
+      #     - "8.8.8.8:53"
+      caServer: https://acme-v02.api.letsencrypt.org/directory
+      # For testing, use staging server:
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+
+# TLS Configuration
+tls:
+  options:
+    default:
+      sslStrategies:
+        - "tls.SniStrict"
+      minVersion: "VersionTLS12"
+      cipherSuites:
+        - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
+        - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+        - "TLS_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_RSA_WITH_AES_128_GCM_SHA256"
+
+# Log Level
+log:
+  level: INFO
+  format: json
+
+# Ping endpoint for health checks
+ping:
+  entryPoint: "web"
